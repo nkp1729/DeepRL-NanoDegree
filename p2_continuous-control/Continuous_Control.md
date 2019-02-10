@@ -69,7 +69,7 @@ print('Number of agents:', num_agents)
 action_size = brain.vector_action_space_size
 print('Size of each action:', action_size)
 
-# examine the state space 
+# examine the state space
 states = env_info.vector_observations
 state_size = states.shape[1]
 print('There are {} agents. Each observes a state with length: {}'.format(states.shape[0], state_size))
@@ -161,10 +161,10 @@ agent.action_size
 #         env_info = env.reset(train_mode=True)[brain_name]     # reset the environment    
 #         state = env_info.vector_observations                 # get the current state (for each agent)
 # #         scores = np.zeros(num_agents)                          # initialize the score (for each agent)
-        
+
 # #         state = env.reset()
 #         agent.reset()
-#         scores = np.zeros(num_agents) 
+#         scores = np.zeros(num_agents)
 #         for t in range(max_t):
 #             action = agent.act(state)
 # #             print(action)
@@ -176,13 +176,13 @@ agent.action_size
 #             rewards = env_info.rewards                         # get reward (for each agent)
 # #             print(reward)
 #             dones = env_info.local_done                        # see if episode finished
-            
+
 #             agent.step(state, action, rewards, next_state, dones)
 #             state = next_state
-            
+
 #             scores += rewards                         # update the score (for each agent)
 #             if np.any(dones):
-#                 break 
+#                 break
 #         scores_deque.append(np.mean(scores))
 #         scores_list.append(np.mean(scores))
 #         print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_deque)), end="")
@@ -190,11 +190,44 @@ agent.action_size
 #         torch.save(agent.critic_local.state_dict(), 'checkpoint_critic.pth')
 #         if i_episode % print_every == 0:
 #             print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_deque)))
-            
+
 #     return scores
 
 
 ```
+
+## 4. Detailed description of the learning algorithm
+This section provides a detailed description of the learning algorithms used. The reacher environment consists of a *continuous action space*, and features *multiple agents* in the same environment.
+
+Due to the continuous action space, Value based methods such as DQN are not suitable here. Although it is possible to descretise a continuous action space, we would walk into the curse of dimensionality, hence adding to the computational complexity of training. To utilise the continuous action space in the formulation of the agent, a *policy gradient* method will be used. Apart from continuous action spaces, policy gradient methods have a number of other advantages: *probabilistic policies*, allow a distribution to allow exploration; and *reduced complexity* from learning a policy directly as opposed to through a value function as proxy.
+
+
+
+### Deep Deterministic Policy Gradient (DDPG)
+The DDPG algorithm here is explained in: [DDPG](https://arxiv.org/pdf/1509.02971.pdf). Here an off policy actor-critic method working in a continuous action space is presented. Here 2 neural network function approximators are used. one for the policy which maps the states to the actions, and another for *the critic* which serves to reduce the variance and sample complexity of the policy estimator.
+
+
+
+
+#### Actor-Critic Methodology
+
+Actor Critic methods directly optimise the policy with a neural network function approximator and have a critic network. Actor Critic methods are a hybrid of policy and value function methods.
+
+The actor network is parametrically updated through gradient accent of the *Q* function representing the discounted sum of future rewards. This update is shown by equation (6) in [DDPG paper](https://arxiv.org/pdf/1509.02971.pdf). The Q function is learned in similar ways to the DQN paper. Here a replay buffer and target are used to train the *Q* function. The replay buffer reduces correlation across samples and a target network with a soft weight update is employed to improve the stability of training.  Used together actor-critic methods are enable faster training.
+
+
+
+#### Ornstein-Uhlenbeck process and Exploration vs Exploitation
+
+During training when one wishes to maximize the discounted sum of future rewards one needs to chose the best actions to achieve the largest reward *exploitation*. Yet this depends in the current best estimate of how state value pairs return rewards. In order to better determine this one needs to *explore* the state action space and could discover a better policy returning a higher reward. This is a trade off on exploration and exploitation. For value based methods like DQN this can be achieved through an *epsilon- greedy* policy where one behaves randomly with probability epsilon. For continuous action spaces we need a different approach.
+
+
+For the gripper problem the noise distribution is modelled as the *Ornstein-Uhlenbeck process*[OU process](https://en.wikipedia.org/wiki/Ornstein%E2%80%93Uhlenbeck_process). The Ornstein-Uhlenbeck process contributes noise to the policy at each step. The OU process is a gaussian process which is nowhere continuous and differentiable. As it is a distribution over functions and modeled over time, it is correlated with previous time steps and hence useful for modeling noise in our application.
+
+
+For the OU process there are 5 hyperparameters $\mu $: accumulated mean, $\theta$: mean reversion factor and $\sigma$: the variance, $\epsilon$ and $\epsilon$ decay. The last two are used to determine how the noise deteriorates with time. this is useful for scheduling the amount of exploration at the start of the training and moving towards a more exploitative strategy later on.
+
+
 
 ## Training with a Deep Deterministic Policy Gradient Agent
 
@@ -202,25 +235,25 @@ agent.action_size
 ```python
 def ddpg(n_episodes=1000, max_t=10000, print_every=100):
     """DDQN Algorithm.
-    
+
     Params
     ======
         n_episodes (int): maximum number of training episodes
         max_t (int): maximum number of timesteps per episode
         print_every (int): frequency of printing information throughout iteration """
-    
+
     scores = []
     scores_deque = deque(maxlen=print_every)
-    
+
     for i_episode in range(1, n_episodes+1):
         env_info = env.reset(train_mode=True)[brain_name]
         agent.reset()
         state = env_info.vector_observations[0]            # get the current state
         score = 0
-        
+
         for t in range(max_t):
             action = agent.act(state)          # select an action
-       
+
             env_info = env.step(action)[brain_name]        # send the action to the environment
             next_state = env_info.vector_observations[0]   # get the next state
             reward = env_info.rewards[0]                   # get the reward
@@ -230,23 +263,23 @@ def ddpg(n_episodes=1000, max_t=10000, print_every=100):
             state = next_state                             # roll over the state to next time step
             if done:                                       # exit loop if episode finished
                 break
-        
+
         scores_deque.append(score)       # save most recent score
         scores.append(score)             # save most recent score
 
         print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_deque)), end="")
-        
+
         if i_episode % print_every == 0:
             print('\rEpisode {}\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_deque)))
             torch.save(agent.actor_local.state_dict(), 'checkpoint_actor.pth')
             torch.save(agent.critic_local.state_dict(), 'checkpoint_critic.pth')
-        
+
         if np.mean(scores_deque)>=30.0:
             print('\nEnvironment solved in {:d} episodes!\tAverage Score: {:.2f}'.format(i_episode, np.mean(scores_deque)))
             torch.save(agent.actor_local.state_dict(), 'checkpoint_actor.pth')
             torch.save(agent.critic_local.state_dict(), 'checkpoint_critic.pth')
             break
-            
+
     return scores
 ```
 
@@ -282,7 +315,7 @@ env = UnityEnvironment(file_name='/home/neilkunal/Desktop/DeepRL/deep-reinforcem
 brain_name = env.brain_names[0]
 brain = env.brains[brain_name]
 env_info = env.reset(train_mode=False)[brain_name]
-# 
+#
 
 ```
 
@@ -294,7 +327,7 @@ agent = Agent(state_size=state_size, action_size=action_size, seed=0)
 
 agent.actor_local.state_dict(torch.load( 'checkpoint_actor.pth'))
 agent.critic_local.state_dict(torch.load( 'checkpoint_critic.pth'))
-   
+
 
 agent.qnetwork_local.load_state_dict(torch.load('Navigation_nopixels.pth'))
 # env = UnityEnvironment(file_name="/home/neilkunal/Desktop/DeepRL/deep-reinforcement-learning/p1_navigation/Banana_Linux/Banana.x86_64")
@@ -309,12 +342,12 @@ for i in range(3):
 
         env_info = env.step(action)[brain_name]        # send the action to the environment
         reward = env_info.rewards[0]                   # get the reward
-        done = env_info.local_done[0] 
+        done = env_info.local_done[0]
 #         state, reward, done, _ = env.step(action)
         state = env_info.vector_observations[0]
         if done:
-            break 
-            
+            break
+
 # env.close()
 ```
 
@@ -325,6 +358,6 @@ env.close()
 
 ## Further work and improvements
 
-The performance can be further imprved by hyper parameter tuning. 
+The performance can be further imprved by hyper parameter tuning.
 
 It is suggested that PPO would have better performance in addition to D4PG
